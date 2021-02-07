@@ -1,114 +1,99 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- * @flow strict-local
- */
+import React, {useEffect} from 'react';
+import * as Sentry from '@sentry/react-native';
+import {Platform, UIManager} from 'react-native';
+import {Provider} from 'react-redux';
+import store from './redux/store';
+import {SENTRY_DSN, MOCK_API} from './config';
+import {enableScreens} from 'react-native-screens';
+import {AppearanceProvider} from 'react-native-appearance';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
+import {ApplicationProvider, IconRegistry} from '@ui-kitten/components';
+import {EvaIconsPack} from '@ui-kitten/eva-icons';
+import {appMappings, appThemes} from './common/theme/appTheming';
+import {Mapping, Theme, Theming} from './services/theme';
+import {AppStorage} from './services/appStorage';
+import {AppLoading, Task} from './common/theme/appLoading';
+import RootErrorBoundary from './features/error-boundary/RootErrorBoundary';
+import Navigator from './features/navigation/Navigator';
+import {makeMirage} from './services/network/mock/mirage';
 
-import React from 'react';
-import {
-  SafeAreaView,
-  StyleSheet,
-  ScrollView,
-  View,
-  Text,
-  StatusBar,
-} from 'react-native';
+const loadingTasks: Task[] = [
+  // Should be used it when running Expo.
+  // In Bare RN Project this is configured by react-native.config.js
+  () =>
+    AppStorage.getMapping(defaultConfig.mapping).then((result) => [
+      'mapping',
+      result,
+    ]),
+  () =>
+    AppStorage.getTheme(defaultConfig.theme).then((result) => [
+      'theme',
+      result,
+    ]),
+];
 
-import {
-  Header,
-  LearnMoreLinks,
-  Colors,
-  DebugInstructions,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+const defaultConfig: {mapping: Mapping; theme: Theme} = {
+  mapping: 'eva',
+  theme: 'dark',
+};
 
-const App: () => React$Node = () => {
+(function setup() {
+  // React Navigation, optimize memory usage.
+  enableScreens();
+
+  if (typeof SENTRY_DSN === 'string' && SENTRY_DSN.length > 0) {
+    Sentry.init({
+      dsn: SENTRY_DSN,
+    });
+  }
+
+  // Layout animation
+  if (Platform.OS === 'android') {
+    if (UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }
+
+  // Mirage – API Mocking
+  if (MOCK_API === 'YES') {
+    makeMirage();
+    __DEV__ && console.log('Mirage Configured');
+  }
+})();
+
+const App = ({mapping, theme}: any): React.ReactElement => {
+  const [mappingContext, currentMapping] = Theming.useMapping(
+    appMappings,
+    mapping,
+  );
+  const [themeContext, currentTheme] = Theming.useTheming(
+    appThemes,
+    mapping,
+    theme,
+  );
+
   return (
-    <>
-      <StatusBar barStyle="dark-content" />
-      <SafeAreaView>
-        <ScrollView
-          contentInsetAdjustmentBehavior="automatic"
-          style={styles.scrollView}>
-          <Header />
-          {global.HermesInternal == null ? null : (
-            <View style={styles.engine}>
-              <Text style={styles.footer}>Engine: Hermes</Text>
-            </View>
-          )}
-          <View style={styles.body}>
-            <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>Step One</Text>
-              <Text style={styles.sectionDescription}>
-                Edit <Text style={styles.highlight}>App.js</Text> to change this
-                screen and then come back to see your edits.
-              </Text>
-            </View>
-            <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>See Your Changes</Text>
-              <Text style={styles.sectionDescription}>
-                <ReloadInstructions />
-              </Text>
-            </View>
-            <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>Debug</Text>
-              <Text style={styles.sectionDescription}>
-                <DebugInstructions />
-              </Text>
-            </View>
-            <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>Learn More</Text>
-              <Text style={styles.sectionDescription}>
-                Read the docs to discover what to do next:
-              </Text>
-            </View>
-            <LearnMoreLinks />
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    </>
+    <RootErrorBoundary>
+      <Provider store={store}>
+        <IconRegistry icons={EvaIconsPack} />
+        <AppearanceProvider>
+          <ApplicationProvider {...currentMapping} theme={currentTheme}>
+            <Theming.MappingContext.Provider value={mappingContext}>
+              <Theming.ThemeContext.Provider value={themeContext}>
+                <SafeAreaProvider>
+                  <Navigator />
+                </SafeAreaProvider>
+              </Theming.ThemeContext.Provider>
+            </Theming.MappingContext.Provider>
+          </ApplicationProvider>
+        </AppearanceProvider>
+      </Provider>
+    </RootErrorBoundary>
   );
 };
 
-const styles = StyleSheet.create({
-  scrollView: {
-    backgroundColor: Colors.lighter,
-  },
-  engine: {
-    position: 'absolute',
-    right: 0,
-  },
-  body: {
-    backgroundColor: Colors.white,
-  },
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: Colors.black,
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-    color: Colors.dark,
-  },
-  highlight: {
-    fontWeight: '700',
-  },
-  footer: {
-    color: Colors.dark,
-    fontSize: 12,
-    fontWeight: '600',
-    padding: 4,
-    paddingRight: 12,
-    textAlign: 'right',
-  },
-});
-
-export default App;
+export default (): React.ReactElement => (
+  <AppLoading tasks={loadingTasks} initialConfig={defaultConfig}>
+    {(props) => <App {...props} />}
+  </AppLoading>
+);
